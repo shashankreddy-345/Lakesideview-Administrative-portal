@@ -11,15 +11,13 @@ import {
 } from "./analyticsUtilization";
 
 const getHeatmapColor = (value: number) => {
-  if (value > 80) return "bg-rose-500";
-  if (value >= 60) return "bg-amber-400";
-  if (value >= 30) return "bg-emerald-400";
-  return "bg-slate-200";
+  if (value > 80) return "bg-rose-500"; // High
+  if (value > 40) return "bg-amber-400"; // Busy
+  return "bg-emerald-400"; // Optimal
 };
 
 const getHeatmapTextColor = (value: number) => {
-  if (value >= 30) return "text-white";
-  return "text-slate-600";
+  return "text-white";
 };
 
 const asId = (v: any) => {
@@ -57,12 +55,16 @@ export function Overview() {
         // Using the shared utility for consistent calculation
 
         // Map API data to utility types
-        const validBookings: Booking[] = bookings.map((b: any) => ({
-          resource_id: asId(b.resource_id || b.resourceId),
-          start_time: b.start_time || `${b.date}T${b.startTime}`,
-          end_time: b.end_time || `${b.date}T${b.endTime}`,
-          status: b.status
-        }));
+        const validBookings: Booking[] = bookings.map((b: any) => {
+          const sTime = b.start_time || `${b.date}T${b.startTime}`;
+          const eTime = b.end_time || `${b.date}T${b.endTime}`;
+          return {
+            resource_id: asId(b.resource_id || b.resourceId),
+            start_time: sTime.replace(" ", "T"),
+            end_time: eTime.replace(" ", "T"),
+            status: b.status
+          };
+        });
 
         const validResources: Resource[] = resources.map((r: any) => ({
           resource_id: asId(r.resource_id || r._id),
@@ -72,12 +74,15 @@ export function Overview() {
           capacity: r.capacity || 1
         }));
 
+        const analyticsStart = startOfMonth;
+        const analyticsEnd = endOfMonth;
+
         // Compute metrics grouped by hour to get aggregate totals
         const metrics = computeUtilizationMetrics(
           validBookings,
           validResources,
-          startOfMonth,
-          endOfMonth,
+          analyticsStart,
+          analyticsEnd,
           "hour",
           { operatingHours: { start: 8, end: 22 } }
         );
@@ -101,27 +106,26 @@ export function Overview() {
           utilization: avgUtilization,
         });
 
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
+        // Calculate "Today" in local time for the analytics window
+        const analyticsTodayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+        const analyticsTodayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
         // Process Daily Trend (Today)
         const dailyData = buildDailyUtilizationTrend(
           validBookings,
           validResources,
-          todayStart,
-          todayEnd,
-          { operatingHours: { start: 8, end: 22 } }
+          analyticsTodayStart,
+          analyticsTodayEnd,
+          { operatingHours: { start: 8, end: 24 } }
         );
-        setDailyTrendData(dailyData.filter((d, i) => i >= 8 && i <= 22).map(d => ({ time: d.hour, utilization: d.utilization })));
+        setDailyTrendData(dailyData.filter((d, i) => i >= 8 && i <= 23).map(d => ({ time: d.hour, utilization: d.utilization })));
 
         // Process Heatmap Data
         const heatmap = buildWeeklyUsageHeatmap(
           validBookings,
           validResources,
-          startOfMonth,
-          endOfMonth
+          analyticsStart,
+          analyticsEnd
         );
         setHeatmapData(heatmap);
 
@@ -352,20 +356,16 @@ export function Overview() {
         <div className="flex items-center gap-6 mt-6 pt-6 border-t border-slate-100">
           <span className="text-sm font-medium text-slate-600">Utilization:</span>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-slate-200" />
-            <span className="text-sm text-slate-600">Low (&lt;30%)</span>
-          </div>
-          <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-emerald-400" />
-            <span className="text-sm text-slate-600">Optimal (30-60%)</span>
+            <span className="text-sm text-slate-600">Optimal (0-40%)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-amber-400" />
-            <span className="text-sm text-slate-600">Busy (60-80%)</span>
+            <span className="text-sm text-slate-600">Busy (40-80%)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-rose-500" />
-            <span className="text-sm text-slate-600">Over-utilized (&gt;80%)</span>
+            <span className="text-sm text-slate-600">High (&gt;80%)</span>
           </div>
         </div>
       </div>

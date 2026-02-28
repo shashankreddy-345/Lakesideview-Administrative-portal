@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Star, Filter, Search, TrendingUp, MessageSquare, ThumbsUp } from "lucide-react";
+import { Star, Filter, Search, Users, MessageSquare, ThumbsUp } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
@@ -71,6 +71,7 @@ const statusConfig = {
 
 export function FeedbackMonitor() {
   const [feedbackList, setFeedbackList] = useState<Feedback[]>([]);
+  const [studentCount, setStudentCount] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedRating, setSelectedRating] = useState<number | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -79,10 +80,13 @@ export function FeedbackMonitor() {
   const itemsPerPage = 10;
 
   useEffect(() => {
-    const fetchFeedback = async () => {
+    const fetchData = async () => {
       try {
-        const data = await api.feedback.list();
-        const mapped: Feedback[] = data.map((f: any) => ({
+        const [feedbackData, usersData] = await Promise.all([
+          api.feedback.list(),
+          api.users.list().catch(() => [])
+        ]);
+        const mapped: Feedback[] = feedbackData.map((f: any) => ({
           id: f._id,
           userName: "Anonymous Student", // API doesn't provide user details in list yet
           resourceName: "General Resource", // API doesn't provide resource details in list yet
@@ -94,11 +98,13 @@ export function FeedbackMonitor() {
           status: "new"
         }));
         setFeedbackList(mapped);
+        const count = Array.isArray(usersData) ? usersData.filter((u: any) => u.role === 'student').length : 0;
+        setStudentCount(count);
       } catch (error) {
-        console.error("Failed to fetch feedback", error);
+        console.error("Failed to fetch data", error);
       }
     };
-    fetchFeedback();
+    fetchData();
   }, []);
 
   useEffect(() => {
@@ -192,13 +198,11 @@ export function FeedbackMonitor() {
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center">
-              <TrendingUp className="w-6 h-6 text-emerald-600" />
+              <Users className="w-6 h-6 text-emerald-600" />
             </div>
           </div>
-          <h3 className="text-2xl font-semibold text-slate-900 mb-1">
-            {feedbackList.filter((f) => f.status === "resolved").length}
-          </h3>
-          <p className="text-sm text-slate-600">Resolved Issues</p>
+          <h3 className="text-2xl font-semibold text-slate-900 mb-1">{studentCount}</h3>
+          <p className="text-sm text-slate-600">Total Students</p>
         </div>
       </div>
 

@@ -22,16 +22,13 @@ const MS_HOUR = 3_600_000;
 
 function parseDT(s: string) {
   let iso = s.replace(" ", "T"); // Ensure ISO format for Date constructor
-  // If no timezone offset is present (no Z, +HH:MM, -HH:MM), assume UTC by appending Z
-  if (!/Z$|[+-]\d{2}:?\d{2}$/.test(iso)) {
-    iso += "Z";
-  }
-  return new Date(iso);
+  // Strip timezone offset (Z or +HH:mm or -HH:mm) to treat as local time
+  return new Date(iso.replace(/(Z|[+-]\d{2}:?\d{2})$/, ""));
 }
 
 function floorToHour(d: Date) {
   const x = new Date(d);
-  x.setUTCMinutes(0, 0, 0);
+  x.setMinutes(0, 0, 0);
   return x;
 }
 
@@ -44,13 +41,6 @@ function toHourLabel(h: number) {
   const isAM = h < 12;
   const hour12 = h === 0 ? 12 : h <= 12 ? h : h - 12;
   return `${hour12} ${isAM ? "AM" : "PM"}`;
-}
-
-// Helper to get the hour in the target timezone (-06:00)
-function getZoneHour(d: Date) {
-  // Shift UTC time by -6 hours to get "local" time in UTC fields
-  const shifted = new Date(d.getTime() - 6 * 60 * 60 * 1000);
-  return shifted.getUTCHours();
 }
 
 const WEEK_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
@@ -100,7 +90,7 @@ export function computeUtilizationMetrics(
       const chunkStart = t > hourStart ? t : hourStart;
       const chunkEnd = rangeEnd < hourEnd ? rangeEnd : hourEnd;
       
-      const h = getZoneHour(hourStart);
+      const h = hourStart.getHours();
       const isOpen = !opts?.operatingHours || (h >= opts.operatingHours.start && h < opts.operatingHours.end);
       
       if (isOpen) totalRangeMin += Math.max(0, (chunkEnd.getTime() - chunkStart.getTime()) / MS_MIN);
@@ -155,7 +145,7 @@ export function computeUtilizationMetrics(
 
       const minutes = Math.max(0, (chunkEnd.getTime() - chunkStart.getTime()) / MS_MIN);
 
-      const h = getZoneHour(hourStart);
+      const h = hourStart.getHours();
       if (!opts?.operatingHours || (h >= opts.operatingHours.start && h < opts.operatingHours.end)) {
         const key = groupBy === "hour" ? h : weekdayMon0(hourStart);
         
@@ -206,7 +196,7 @@ export function computeUtilizationMetrics(
         const chunkStart = t > hourStart ? t : hourStart;
         const chunkEnd = end < hourEnd ? end : hourEnd;
 
-        const h = getZoneHour(hourStart);
+        const h = hourStart.getHours();
         if (!opts?.operatingHours || (h >= opts.operatingHours.start && h < opts.operatingHours.end)) {
           const minutes = Math.max(0, (chunkEnd.getTime() - chunkStart.getTime()) / MS_MIN);
           const key = groupBy === "hour" ? h : weekdayMon0(hourStart);
@@ -296,7 +286,7 @@ export function buildUtilizationStatusByType(
       const chunkStart = t > hourStart ? t : hourStart;
       const chunkEnd = rangeEnd < hourEnd ? rangeEnd : hourEnd;
       
-      const h = getZoneHour(hourStart);
+      const h = hourStart.getHours();
       const isOpen = !opts?.operatingHours || (h >= opts.operatingHours.start && h < opts.operatingHours.end);
       
       if (isOpen && chunkEnd > chunkStart) totalRangeMin += (chunkEnd.getTime() - chunkStart.getTime()) / MS_MIN;
@@ -328,7 +318,7 @@ export function buildUtilizationStatusByType(
       const chunkStart = t > hourStart ? t : hourStart;
       const chunkEnd = end < hourEnd ? end : hourEnd;
       
-      const h = getZoneHour(hourStart);
+      const h = hourStart.getHours();
       if (!opts?.operatingHours || (h >= opts.operatingHours.start && h < opts.operatingHours.end)) {
         minutes += Math.max(0, (chunkEnd.getTime() - chunkStart.getTime()) / MS_MIN);
       }

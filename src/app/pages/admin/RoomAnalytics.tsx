@@ -29,12 +29,11 @@ import {
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444"];
 
 const getHeatmapColor = (value: number) => {
-  if (value > 80) return "bg-rose-500";
-  if (value >= 60) return "bg-amber-400";
-  if (value >= 30) return "bg-emerald-400";
-  return "bg-slate-200";
+  if (value > 80) return "bg-rose-500"; // High
+  if (value > 40) return "bg-amber-400"; // Busy
+  return "bg-emerald-400"; // Optimal
 };
-const getHeatmapTextColor = (value: number) => (value >= 30 ? "text-white" : "text-slate-600");
+const getHeatmapTextColor = (value: number) => "text-white";
 
 const normalizeToISO = (s: string) => {
   if (!s) return "";
@@ -62,10 +61,8 @@ const getLatestBookingDate = (bookings: any[]) => {
 
 function getDayRangeExclusive(selectedDate: string) {
   // [start, end) where end = next day 00:00
-  // Use specific timezone offset -06:00
-  const offset = "-06:00";
-  const start = new Date(`${selectedDate}T00:00:00${offset}`);
-  const end = new Date(`${selectedDate}T00:00:00${offset}`);
+  const start = new Date(`${selectedDate}T00:00:00`);
+  const end = new Date(`${selectedDate}T00:00:00`);
   end.setTime(end.getTime() + 24 * 60 * 60 * 1000); // Add 24 hours
   return { start, end };
 }
@@ -74,8 +71,10 @@ export function RoomAnalytics() {
   // initial: today, but we will auto-correct to a booking date if today has no bookings
   const today = useMemo(() => {
     const d = new Date();
-    // Use local date string in YYYY-MM-DD format
-    return d.toLocaleDateString('en-CA'); 
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }, []);
   const [selectedDate, setSelectedDate] = useState<string>(today);
 
@@ -160,8 +159,11 @@ export function RoomAnalytics() {
           { label: "21-22", startHour: 21, endHour: 22 },
         ];
 
+        const analyticsStart = start;
+        const analyticsEnd = end;
+
         // 1) Utilization by Room Name
-        const roomUtils = buildUtilizationByRoomName(validBookings, filteredResources, start, end, {
+        const roomUtils = buildUtilizationByRoomName(validBookings, filteredResources, analyticsStart, analyticsEnd, {
           nameKey: "name",
           includeStatuses: ["completed", "confirmed", "active", "upcoming"],
           onlyAvailableResources: false,
@@ -171,24 +173,22 @@ export function RoomAnalytics() {
         setUtilizationByRoom(roomUtils.map((r) => ({ name: r.roomName, utilization: r.utilization })));
 
         // 2) Status Distribution from utilization results
-        const statusCounts = { Low: 0, Optimal: 0, Busy: 0, Over: 0 };
+        const statusCounts = { Optimal: 0, Busy: 0, High: 0 };
         for (const r of roomUtils) {
-          if (r.utilization > 80) statusCounts.Over++;
-          else if (r.utilization >= 60) statusCounts.Busy++;
-          else if (r.utilization >= 30) statusCounts.Optimal++;
-          else statusCounts.Low++;
+          if (r.utilization > 80) statusCounts.High++;
+          else if (r.utilization > 40) statusCounts.Busy++;
+          else statusCounts.Optimal++;
         }
 
         const totalRooms = roomUtils.length || 1;
         setStatusDistribution([
-          { name: "Low (<30%)", value: Math.round((statusCounts.Low / totalRooms) * 100) },
-          { name: "Optimal (30-60%)", value: Math.round((statusCounts.Optimal / totalRooms) * 100) },
-          { name: "Busy (60-80%)", value: Math.round((statusCounts.Busy / totalRooms) * 100) },
-          { name: "Over (>80%)", value: Math.round((statusCounts.Over / totalRooms) * 100) },
+          { name: "Optimal (0-40%)", value: Math.round((statusCounts.Optimal / totalRooms) * 100) },
+          { name: "Busy (40-80%)", value: Math.round((statusCounts.Busy / totalRooms) * 100) },
+          { name: "High (>80%)", value: Math.round((statusCounts.High / totalRooms) * 100) },
         ]);
 
         // 3) Heatmap
-        const heatmap = buildRoomTimebandHeatmap(validBookings, filteredResources, start, end, {
+        const heatmap = buildRoomTimebandHeatmap(validBookings, filteredResources, analyticsStart, analyticsEnd, {
           bands,
           nameKey: "name",
           includeStatuses: ["completed", "confirmed", "active", "upcoming"],
@@ -360,20 +360,16 @@ export function RoomAnalytics() {
         <div className="flex flex-wrap items-center gap-6 mt-6 pt-6 border-t border-slate-100">
           <span className="text-sm font-medium text-slate-600">Utilization:</span>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-slate-200" />
-            <span className="text-sm text-slate-600">Low (&lt;30%)</span>
-          </div>
-          <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-emerald-400" />
-            <span className="text-sm text-slate-600">Optimal (30-60%)</span>
+            <span className="text-sm text-slate-600">Optimal (0-40%)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-amber-400" />
-            <span className="text-sm text-slate-600">Busy (60-80%)</span>
+            <span className="text-sm text-slate-600">Busy (40-80%)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-rose-500" />
-            <span className="text-sm text-slate-600">Over-utilized (&gt;80%)</span>
+            <span className="text-sm text-slate-600">High (&gt;80%)</span>
           </div>
         </div>
       </div>

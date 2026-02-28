@@ -32,27 +32,14 @@ function parseDT(s: string) {
   // Accept "YYYY-MM-DD HH:mm:ss" and ISO
   if (!s) return new Date(NaN);
   let iso = s.replace(" ", "T");
-  // If no timezone offset is present (no Z, +HH:MM, -HH:MM), assume UTC by appending Z
-  if (!/Z$|[+-]\d{2}:?\d{2}$/.test(iso)) {
-    iso += "Z";
-  }
-  return new Date(iso);
+  // Strip timezone offset (Z or +HH:mm or -HH:mm) to treat as local time
+  return new Date(iso.replace(/(Z|[+-]\d{2}:?\d{2})$/, ""));
 }
 
 function floorToHour(d: Date) {
   const x = new Date(d);
-  x.setUTCMinutes(0, 0, 0);
+  x.setMinutes(0, 0, 0);
   return x;
-}
-
-// Helper to shift a date to the target timezone (-06:00) represented as UTC
-function toTargetZone(d: Date) {
-  return new Date(d.getTime() - 6 * 60 * 60 * 1000);
-}
-
-// Helper to get the hour in the target timezone (-06:00)
-function getZoneHour(d: Date) {
-  return toTargetZone(d).getUTCHours();
 }
 
 /**
@@ -88,7 +75,7 @@ export function buildUtilizationByRoomName(
     const chunkStart = t > hourStart ? t : hourStart;
     const chunkEnd = rangeEnd < hourEnd ? rangeEnd : hourEnd;
     
-    const h = getZoneHour(hourStart);
+    const h = hourStart.getHours();
     const isOpen = !opts?.operatingHours || (h >= opts.operatingHours.start && h < opts.operatingHours.end);
     
     if (isOpen && chunkEnd > chunkStart) {
@@ -123,7 +110,7 @@ export function buildUtilizationByRoomName(
       const chunkStart = t > hourStart ? t : hourStart;
       const chunkEnd = end < hourEnd ? end : hourEnd;
       
-      const h = getZoneHour(hourStart);
+      const h = hourStart.getHours();
       if (!opts?.operatingHours || (h >= opts.operatingHours.start && h < opts.operatingHours.end)) {
         minutes += Math.max(0, (chunkEnd.getTime() - chunkStart.getTime()) / MS_MIN);
       }
@@ -135,17 +122,18 @@ export function buildUtilizationByRoomName(
   return scopedResources
     .map((r) => {
       const bookedMin = bookedById.get(r.resource_id) ?? 0;
-      const util = totalRangeMin <= 0 ? 0 : Math.min(100, Math.max(0, (bookedMin / totalRangeMin) * 100));
+      const capacity = r.capacity || 1;
+      const availableMin = totalRangeMin * capacity;
+      const util = availableMin <= 0 ? 0 : Math.min(100, Math.max(0, (bookedMin / availableMin) * 100));
 
       const roomName = nameKey === "name" ? (r.name || r.resource_id) : r.resource_id;
 
       return {
         roomId: r.resource_id,
         roomName,
-        // Adjust utilization by capacity
-        utilization: Math.round(util / (r.capacity || 1)),
+        utilization: Math.round(util),
         bookedMinutes: Math.round(bookedMin),
-        availableMinutes: Math.round(totalRangeMin * (r.capacity || 1)),
+        availableMinutes: Math.round(availableMin),
       };
     })
     .filter(r => r.roomName !== 'undefined')    .sort((a, b) => b.utilization - a.utilization);
@@ -179,24 +167,24 @@ export function buildRoomTimebandHeatmap(
   // Denominator per band for ONE room
   const availMinPerBand = bands.map(() => 0);
   {
-    const dayStart = toTargetZone(rangeStart);
-    dayStart.setUTCHours(0, 0, 0, 0);
-    const rangeEndShifted = toTargetZone(rangeEnd);
+    const dayStart = new Date(rangeStart);
+    dayStart.setHours(0, 0, 0, 0);
+    const rangeEndShifted = new Date(rangeEnd);
 
-    for (let d = new Date(dayStart); d < rangeEndShifted; d.setUTCDate(d.getUTCDate() + 1)) {
+    for (let d = new Date(dayStart); d < rangeEndShifted; d.setDate(d.getDate() + 1)) {
       const nextDay = new Date(d);
-      nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+      nextDay.setDate(nextDay.getDate() + 1);
 
-      const dayWindowStart = d < toTargetZone(rangeStart) ? toTargetZone(rangeStart) : d;
+      const dayWindowStart = d < rangeStart ? rangeStart : d;
       const dayWindowEnd = nextDay > rangeEndShifted ? rangeEndShifted : nextDay;
       if (dayWindowEnd <= dayWindowStart) continue;
 
       for (let i = 0; i < bands.length; i++) {
         const b = bands[i];
         const bandStart = new Date(d);
-        bandStart.setUTCHours(b.startHour, 0, 0, 0);
+        bandStart.setHours(b.startHour, 0, 0, 0);
         const bandEnd = new Date(d);
-        bandEnd.setUTCHours(b.endHour, 0, 0, 0);
+        bandEnd.setHours(b.endHour, 0, 0, 0);
         const s = bandStart < dayWindowStart ? dayWindowStart : bandStart;
         const e = bandEnd > dayWindowEnd ? dayWindowEnd : bandEnd;
         if (e > s) {
@@ -217,11 +205,11 @@ export function buildRoomTimebandHeatmap(
     const beRaw = parseDT(bkg.end_time);
     if (isNaN(bsRaw.getTime()) || isNaN(beRaw.getTime())) continue;
 
-    // Shift booking times to target zone for comparison
-    const bs = toTargetZone(bsRaw);
-    const be = toTargetZone(beRaw);
-    const rangeStartShifted = toTargetZone(rangeStart);
-    const rangeEndShifted = toTargetZone(rangeEnd);
+    // Use native dates without shifting
+    const bs = bsRaw;
+    const be = beRaw;
+    const rangeStartShifted = rangeStart;
+    const rangeEndShifted = rangeEnd;
 
     const start0 = bs < rangeStartShifted ? rangeStartShifted : bs;
     const end0 = be > rangeEndShifted ? rangeEndShifted : be;
@@ -229,16 +217,16 @@ export function buildRoomTimebandHeatmap(
 
     // Iterate day-by-day for this booking
     const curDay = new Date(start0);
-    curDay.setUTCHours(0, 0, 0, 0);
+    curDay.setHours(0, 0, 0, 0);
 
-    for (let d = new Date(curDay); d < end0; d.setUTCDate(d.getUTCDate() + 1)) {
+    for (let d = new Date(curDay); d < end0; d.setDate(d.getDate() + 1)) {
       for (let i = 0; i < bands.length; i++) {
         const band = bands[i];
 
         const bandStart = new Date(d);
-        bandStart.setUTCHours(band.startHour, 0, 0, 0);
+        bandStart.setHours(band.startHour, 0, 0, 0);
         const bandEnd = new Date(d);
-        bandEnd.setUTCHours(band.endHour, 0, 0, 0);
+        bandEnd.setHours(band.endHour, 0, 0, 0);
 
         const s = bandStart > start0 ? bandStart : start0;
         const e = bandEnd < end0 ? bandEnd : end0;

@@ -26,12 +26,8 @@ const asId = (v: any) => {
 
 export function ResourceAnalytics() {
   const [resources, setResources] = useState<any[]>([]);
-  const [startDate, setStartDate] = useState(() => {
-    const date = new Date();
-    date.setMonth(0, 1); // Start of current year (Jan 1st) to show comprehensive data
-    return date.toISOString().split('T')[0];
-  });
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]); // Today
+  const [startDate, setStartDate] = useState("2026-02-01");
+  const [endDate, setEndDate] = useState("2026-03-10");
   
   const [dailyTrendData, setDailyTrendData] = useState<any[]>([
     { hour: "8 AM", utilization: 0 }, { hour: "10 AM", utilization: 0 },
@@ -48,28 +44,30 @@ export function ResourceAnalytics() {
   const [resourceTypeDistribution, setResourceTypeDistribution] = useState<any[]>([]);
   const [totalBookings, setTotalBookings] = useState(0);
   const [avgUtilization, setAvgUtilization] = useState(0);
-  const [resourcePerformance, setResourcePerformance] = useState<{ over: any[], under: any[], optimal: any[] }>({ over: [], under: [], optimal: [] });
+  const [resourcePerformance, setResourcePerformance] = useState<{ high: any[], busy: any[], optimal: any[] }>({ high: [], busy: [], optimal: [] });
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         // Prepare date range for API
-        // Use specific timezone offset -06:00 to match RoomAnalytics
-        const offset = "-06:00";
-        const startFilter = new Date(`${startDate}T00:00:00${offset}`);
-        const endFilter = new Date(`${endDate}T23:59:59.999${offset}`);
+        const startFilter = new Date(`${startDate}T00:00:00`);
+        const endFilter = new Date(`${endDate}T23:59:59.999`);
 
         const [resourcesData, bookingsData] = await Promise.all([
           api.resources.list().catch(() => []),
           api.bookings.list({ start: startFilter.toISOString(), end: endFilter.toISOString() }).catch(() => [])
         ]);
 
-        const validBookings: Booking[] = (Array.isArray(bookingsData) ? bookingsData : []).map((b: any) => ({
-          resource_id: asId(b.resource_id || b.resourceId),
-          start_time: b.start_time || `${b.date}T${b.startTime}`,
-          end_time: b.end_time || `${b.date}T${b.endTime}`,
-          status: b.status
-        }));
+        const validBookings: Booking[] = (Array.isArray(bookingsData) ? bookingsData : []).map((b: any) => {
+          const sTime = b.start_time || `${b.date}T${b.startTime}`;
+          const eTime = b.end_time || `${b.date}T${b.endTime}`;
+          return {
+            resource_id: asId(b.resource_id || b.resourceId),
+            start_time: sTime.replace(" ", "T"),
+            end_time: eTime.replace(" ", "T"),
+            status: b.status
+          };
+        });
 
         const validResources: Resource[] = (Array.isArray(resourcesData) ? resourcesData : []).map((r: any) => ({
           resource_id: asId(r.resource_id || r._id),
@@ -79,10 +77,13 @@ export function ResourceAnalytics() {
           capacity: r.capacity || 1
         }));
 
+        const analyticsStart = startFilter;
+        const analyticsEnd = endFilter;
+
         // Filter bookings by date range for the "Total Bookings" count
         const filteredBookingsCount = validBookings.filter((b) => {
           const start = new Date(b.start_time.includes("T") ? b.start_time : b.start_time.replace(" ", "T"));
-          return start >= startFilter && start <= endFilter;
+          return start >= analyticsStart && start <= analyticsEnd;
         });
         setTotalBookings(filteredBookingsCount.length);
         
@@ -92,8 +93,8 @@ export function ResourceAnalytics() {
         const overallMetrics = computeUtilizationMetrics(
           validBookings,
           validResources,
-          startFilter,
-          endFilter,
+          analyticsStart,
+          analyticsEnd,
           "type", // Grouping doesn't matter for total sum
           { operatingHours: { start: 8, end: 22 } }
         );
@@ -109,8 +110,8 @@ export function ResourceAnalytics() {
         const dailyData = buildDailyUtilizationTrend(
           validBookings,
           validResources,
-          startFilter,
-          endFilter,
+          analyticsStart,
+          analyticsEnd,
           { operatingHours: { start: 8, end: 22 } }
         );
         setDailyTrendData(dailyData.filter((d, i) => i >= 8 && i <= 22));
@@ -119,8 +120,8 @@ export function ResourceAnalytics() {
         const weeklyData = buildWeeklyUtilizationAndBookings(
           validBookings,
           validResources,
-          startFilter,
-          endFilter,
+          analyticsStart,
+          analyticsEnd,
           { operatingHours: { start: 8, end: 22 } }
         );
         setWeeklyTrendData(weeklyData);
@@ -143,15 +144,15 @@ export function ResourceAnalytics() {
         const roomUtils = buildUtilizationByRoomName(
           validBookings,
           validResources,
-          startFilter,
-          endFilter,
+          analyticsStart,
+          analyticsEnd,
           { nameKey: "name", operatingHours: { start: 8, end: 22 } }
         );
 
-        const performance = { over: [] as any[], under: [] as any[], optimal: [] as any[] };
+        const performance = { high: [] as any[], busy: [] as any[], optimal: [] as any[] };
         roomUtils.forEach(r => {
-          if (r.utilization > 80) performance.over.push({ name: r.roomName, utilization: r.utilization });
-          else if (r.utilization < 30) performance.under.push({ name: r.roomName, utilization: r.utilization });
+          if (r.utilization > 80) performance.high.push({ name: r.roomName, utilization: r.utilization });
+          else if (r.utilization > 40) performance.busy.push({ name: r.roomName, utilization: r.utilization });
           else performance.optimal.push({ name: r.roomName, utilization: r.utilization });
         });
         setResourcePerformance(performance);
@@ -189,6 +190,7 @@ export function ResourceAnalytics() {
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="h-10 rounded-xl w-40"
+                min="2026-02-01"
               />
             </div>
             <div>
@@ -201,6 +203,7 @@ export function ResourceAnalytics() {
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 className="h-10 rounded-xl w-40"
+                max="2026-03-10"
               />
             </div>
             <button className="h-10 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium mt-5 transition-colors">
@@ -342,17 +345,33 @@ export function ResourceAnalytics() {
 
       {/* Resource Performance Lists */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {/* Over-utilized */}
+        {/* High */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <AlertTriangle className="w-5 h-5 text-rose-500" />
-            <h3 className="font-semibold text-slate-900">Over-utilized (&gt;80%)</h3>
+            <h3 className="font-semibold text-slate-900">High (&gt;80%)</h3>
           </div>
           <div className="space-y-3">
-            {resourcePerformance.over.length === 0 ? <p className="text-sm text-slate-500">No resources in this category.</p> : resourcePerformance.over.slice(0, 5).map((r: any) => (
+            {resourcePerformance.high.length === 0 ? <p className="text-sm text-slate-500">No resources in this category.</p> : resourcePerformance.high.slice(0, 5).map((r: any) => (
               <div key={r.name} className="flex justify-between items-center text-sm">
                 <span className="text-slate-700 truncate max-w-[140px]" title={r.name}>{r.name}</span>
                 <span className="font-semibold text-rose-600">{r.utilization}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Busy */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <ArrowDown className="w-5 h-5 text-amber-500" />
+            <h3 className="font-semibold text-slate-900">Busy (40-80%)</h3>
+          </div>
+          <div className="space-y-3">
+            {resourcePerformance.busy.length === 0 ? <p className="text-sm text-slate-500">No resources in this category.</p> : resourcePerformance.busy.slice(0, 5).map((r: any) => (
+              <div key={r.name} className="flex justify-between items-center text-sm">
+                <span className="text-slate-700 truncate max-w-[140px]" title={r.name}>{r.name}</span>
+                <span className="font-semibold text-amber-600">{r.utilization}%</span>
               </div>
             ))}
           </div>
@@ -362,29 +381,13 @@ export function ResourceAnalytics() {
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <CheckCircle className="w-5 h-5 text-emerald-500" />
-            <h3 className="font-semibold text-slate-900">Optimal (30-80%)</h3>
+            <h3 className="font-semibold text-slate-900">Optimal (0-40%)</h3>
           </div>
           <div className="space-y-3">
             {resourcePerformance.optimal.length === 0 ? <p className="text-sm text-slate-500">No resources in this category.</p> : resourcePerformance.optimal.slice(0, 5).map((r: any) => (
               <div key={r.name} className="flex justify-between items-center text-sm">
                 <span className="text-slate-700 truncate max-w-[140px]" title={r.name}>{r.name}</span>
                 <span className="font-semibold text-emerald-600">{r.utilization}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Under-utilized */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <ArrowDown className="w-5 h-5 text-amber-500" />
-            <h3 className="font-semibold text-slate-900">Under-utilized (&lt;30%)</h3>
-          </div>
-          <div className="space-y-3">
-            {resourcePerformance.under.length === 0 ? <p className="text-sm text-slate-500">No resources in this category.</p> : resourcePerformance.under.slice(0, 5).map((r: any) => (
-              <div key={r.name} className="flex justify-between items-center text-sm">
-                <span className="text-slate-700 truncate max-w-[140px]" title={r.name}>{r.name}</span>
-                <span className="font-semibold text-amber-600">{r.utilization}%</span>
               </div>
             ))}
           </div>

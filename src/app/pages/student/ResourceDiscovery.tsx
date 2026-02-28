@@ -37,7 +37,14 @@ const statusConfig = {
     barColor: "bg-rose-400",
     bgColor: "bg-rose-50",
     textColor: "text-rose-700",
-    label: "Over-utilized",
+    label: "High",
+  },
+  maintenance: {
+    color: "bg-slate-500",
+    barColor: "bg-slate-400",
+    bgColor: "bg-slate-100",
+    textColor: "text-slate-700",
+    label: "Maintenance",
   },
 };
 
@@ -56,6 +63,11 @@ const typeFilters = [
   { value: "c-lab", label: "Computer Lab" },
   { value: "conf-room", label: "Meeting Space" }
 ];
+
+const UTILIZATION_THRESHOLDS = {
+  BUSY: 40,
+  HIGH: 80,
+};
 
 export function ResourceDiscovery() {
   const [resources, setResources] = useState<Resource[]>([]);
@@ -96,8 +108,12 @@ export function ResourceDiscovery() {
           const startStr = b.start_time || `${b.date}T${b.startTime}`;
           const endStr = b.end_time || `${b.date}T${b.endTime}`;
           
-          const start = new Date(startStr.includes("T") ? startStr : startStr.replace(" ", "T"));
-          const end = new Date(endStr.includes("T") ? endStr : endStr.replace(" ", "T"));
+          // Strip timezone offset to treat as local time
+          const s = (startStr.includes("T") ? startStr : startStr.replace(" ", "T")).replace(/(Z|[+-]\d{2}:?\d{2})$/, "");
+          const e = (endStr.includes("T") ? endStr : endStr.replace(" ", "T")).replace(/(Z|[+-]\d{2}:?\d{2})$/, "");
+          
+          const start = new Date(s);
+          const end = new Date(e);
 
           if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
 
@@ -108,8 +124,8 @@ export function ResourceDiscovery() {
         const utilization = Math.min(100, Math.round((activeBookings.length / (r.capacity || 1)) * 100));
         
         let status: "optimal" | "busy" | "over-utilized" = "optimal";
-        if (utilization >= 90) status = "over-utilized";
-        else if (utilization >= 70) status = "busy";
+        if (utilization > UTILIZATION_THRESHOLDS.HIGH) status = "over-utilized";
+        else if (utilization > UTILIZATION_THRESHOLDS.BUSY) status = "busy";
 
         return {
           id: resourceId,
@@ -118,8 +134,8 @@ export function ResourceDiscovery() {
           location: `${r.building}, Floor ${r.floor || r.floorNumber || '?'}`,
           capacity: r.capacity,
           utilization,
-          status: (r.status === 'maintenance' ? 'busy' : status) as any,
-          nextAvailable: "Available now"
+          status: (r.status === 'maintenance' ? 'maintenance' : status) as any,
+          nextAvailable: r.status === 'maintenance' ? "Unavailable" : "Available now"
         };
       });
       setResources(mappedResources);
@@ -342,6 +358,7 @@ export function ResourceDiscovery() {
               {/* Action Button */}
               <Button
                 onClick={() => handleBookNow(resource)}
+                disabled={resource.status === 'maintenance'}
                 className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
               >
                 Book Now

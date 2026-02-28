@@ -4,7 +4,7 @@ export type BookingStatus = "completed" | "confirmed" | "active" | "cancelled" |
 
 export type Booking = {
   resource_id: string;
-  start_time: string; // ISO-like string recommended
+  start_time: string; 
   end_time: string;
   status: BookingStatus;
 };
@@ -33,11 +33,8 @@ function parseDT(s: string) {
   // Accept "YYYY-MM-DD HH:mm:ss" and ISO
   if (!s) return new Date(NaN);
   let iso = s.replace(" ", "T");
-  // If no timezone offset is present (no Z, +HH:MM, -HH:MM), assume UTC by appending Z
-  if (!/Z$|[+-]\d{2}:?\d{2}$/.test(iso)) {
-    iso += "Z";
-  }
-  return new Date(iso);
+  // Strip timezone offset (Z or +HH:mm or -HH:mm) to treat as local time
+  return new Date(iso.replace(/(Z|[+-]\d{2}:?\d{2})$/, ""));
 }
 
 function floorToHour(d: Date) {
