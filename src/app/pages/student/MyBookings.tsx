@@ -222,10 +222,6 @@ export function MyBookings() {
           <h1 className="text-3xl font-semibold text-slate-900 mb-2">My Bookings</h1>
           <p className="text-slate-600">Manage your upcoming and past reservations</p>
         </div>
-        <Button className="h-11 px-6 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
-          <Calendar className="w-5 h-5 mr-2" />
-          New Booking
-        </Button>
       </div>
 
       {/* Stats Cards */}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Filter, MapPin, Users, Clock, Calendar } from "lucide-react";
+import { Search, MapPin, Users, Clock, Calendar } from "lucide-react";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../../components/ui/dialog";
@@ -268,10 +268,6 @@ export function ResourceDiscovery() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <Button className="h-12 px-6 rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 shadow-sm">
-          <Filter className="w-5 h-5 mr-2" />
-          More Filters
-        </Button>
       </div>
 
       {/* Type Filter Pills */}
