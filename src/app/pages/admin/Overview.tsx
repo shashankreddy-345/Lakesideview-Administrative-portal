@@ -11,9 +11,10 @@ import {
 } from "./analyticsUtilization";
 
 const getHeatmapColor = (value: number) => {
-  if (value > 80) return "bg-rose-500"; // High
-  if (value > 40) return "bg-amber-400"; // Busy
-  return "bg-emerald-400"; // Optimal
+  if (value > 80) return "bg-rose-500"; // Over
+  if (value >= 50) return "bg-amber-400"; // Busy
+  if (value >= 30) return "bg-emerald-400"; // Optimal
+  return "bg-sky-300"; // Under
 };
 
 const getHeatmapTextColor = (value: number) => {
@@ -84,7 +85,7 @@ export function Overview() {
           analyticsStart,
           analyticsEnd,
           "hour",
-          { operatingHours: { start: 8, end: 22 } }
+          { operatingHours: { start: 8, end: 23 } }
         );
 
         // Sum up total booked and available minutes across all hours in the month
@@ -116,9 +117,9 @@ export function Overview() {
           validResources,
           analyticsTodayStart,
           analyticsTodayEnd,
-          { operatingHours: { start: 8, end: 24 } }
+          { operatingHours: { start: 8, end: 23 } }
         );
-        setDailyTrendData(dailyData.filter((d, i) => i >= 8 && i <= 23).map(d => ({ time: d.hour, utilization: d.utilization })));
+        setDailyTrendData(dailyData.filter((d, i) => i >= 8 && i <= 22).map(d => ({ time: d.hour, utilization: d.utilization })));
 
         // Process Heatmap Data
         const heatmap = buildWeeklyUsageHeatmap(
@@ -356,16 +357,20 @@ export function Overview() {
         <div className="flex items-center gap-6 mt-6 pt-6 border-t border-slate-100">
           <span className="text-sm font-medium text-slate-600">Utilization:</span>
           <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-sky-300" />
+            <span className="text-sm text-slate-600">Under (&lt;30%)</span>
+          </div>
+          <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-emerald-400" />
-            <span className="text-sm text-slate-600">Optimal (0-40%)</span>
+            <span className="text-sm text-slate-600">Optimal (30-50%)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-amber-400" />
-            <span className="text-sm text-slate-600">Busy (40-80%)</span>
+            <span className="text-sm text-slate-600">Busy (50-80%)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-rose-500" />
-            <span className="text-sm text-slate-600">High (&gt;80%)</span>
+            <span className="text-sm text-slate-600">Over (&gt;80%)</span>
           </div>
         </div>
       </div>

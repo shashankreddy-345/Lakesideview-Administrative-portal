@@ -29,9 +29,10 @@ import {
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444"];
 
 const getHeatmapColor = (value: number) => {
-  if (value > 80) return "bg-rose-500"; // High
-  if (value > 40) return "bg-amber-400"; // Busy
-  return "bg-emerald-400"; // Optimal
+  if (value > 80) return "bg-rose-500"; // Over
+  if (value >= 50) return "bg-amber-400"; // Busy
+  if (value >= 30) return "bg-emerald-400"; // Optimal
+  return "bg-sky-300"; // Under
 };
 const getHeatmapTextColor = (value: number) => "text-white";
 
@@ -157,6 +158,7 @@ export function RoomAnalytics() {
           { label: "19-20", startHour: 19, endHour: 20 },
           { label: "20-21", startHour: 20, endHour: 21 },
           { label: "21-22", startHour: 21, endHour: 22 },
+          { label: "22-23", startHour: 22, endHour: 23 },
         ];
 
         const analyticsStart = start;
@@ -167,24 +169,26 @@ export function RoomAnalytics() {
           nameKey: "name",
           includeStatuses: ["completed", "confirmed", "active", "upcoming"],
           onlyAvailableResources: false,
-          operatingHours: { start: 8, end: 22 }
+          operatingHours: { start: 8, end: 23 }
         });
 
         setUtilizationByRoom(roomUtils.map((r) => ({ name: r.roomName, utilization: r.utilization })));
 
         // 2) Status Distribution from utilization results
-        const statusCounts = { Optimal: 0, Busy: 0, High: 0 };
+        const statusCounts = { Under: 0, Optimal: 0, Busy: 0, Over: 0 };
         for (const r of roomUtils) {
-          if (r.utilization > 80) statusCounts.High++;
-          else if (r.utilization > 40) statusCounts.Busy++;
-          else statusCounts.Optimal++;
+          if (r.utilization > 80) statusCounts.Over++;
+          else if (r.utilization >= 50) statusCounts.Busy++;
+          else if (r.utilization >= 30) statusCounts.Optimal++;
+          else statusCounts.Under++;
         }
 
         const totalRooms = roomUtils.length || 1;
         setStatusDistribution([
-          { name: "Optimal (0-40%)", value: Math.round((statusCounts.Optimal / totalRooms) * 100) },
-          { name: "Busy (40-80%)", value: Math.round((statusCounts.Busy / totalRooms) * 100) },
-          { name: "High (>80%)", value: Math.round((statusCounts.High / totalRooms) * 100) },
+          { name: "Under (<30%)", value: Math.round((statusCounts.Under / totalRooms) * 100) },
+          { name: "Optimal (30-50%)", value: Math.round((statusCounts.Optimal / totalRooms) * 100) },
+          { name: "Busy (50-80%)", value: Math.round((statusCounts.Busy / totalRooms) * 100) },
+          { name: "Over (>80%)", value: Math.round((statusCounts.Over / totalRooms) * 100) },
         ]);
 
         // 3) Heatmap
@@ -360,16 +364,20 @@ export function RoomAnalytics() {
         <div className="flex flex-wrap items-center gap-6 mt-6 pt-6 border-t border-slate-100">
           <span className="text-sm font-medium text-slate-600">Utilization:</span>
           <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-sky-300" />
+            <span className="text-sm text-slate-600">Under (&lt;30%)</span>
+          </div>
+          <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-emerald-400" />
-            <span className="text-sm text-slate-600">Optimal (0-40%)</span>
+            <span className="text-sm text-slate-600">Optimal (30-50%)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-amber-400" />
-            <span className="text-sm text-slate-600">Busy (40-80%)</span>
+            <span className="text-sm text-slate-600">Busy (50-80%)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-rose-500" />
-            <span className="text-sm text-slate-600">High (&gt;80%)</span>
+            <span className="text-sm text-slate-600">Over (&gt;80%)</span>
           </div>
         </div>
       </div>

@@ -393,7 +393,7 @@ export function buildWeeklyUsageHeatmap(
   });
 
   const resourceIds = new Set(scopedResources.map((r) => r.resource_id));
-  const resourceCount = scopedResources.length;
+  const totalCapacity = scopedResources.reduce((sum, r) => sum + (r.capacity || 1), 0);
 
   const bookedMin: number[][] = Array.from({ length: 7 }, () => Array(bands.length).fill(0));
   const availMin: number[][] = Array.from({ length: 7 }, () => Array(bands.length).fill(0));
@@ -427,7 +427,7 @@ export function buildWeeklyUsageHeatmap(
 
         if (end > start) {
           const minutes = (end.getTime() - start.getTime()) / MS_MIN;
-          availMin[wd][bi] += minutes * resourceCount;
+          availMin[wd][bi] += minutes * totalCapacity;
         }
       }
     }
