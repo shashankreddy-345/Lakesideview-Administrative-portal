@@ -74,6 +74,15 @@ export function MyBookings() {
         api.resources.list().catch(() => [])
       ]);
 
+      // Sort bookings by date descending
+      bookingsData.sort((a: any, b: any) => {
+        const sA = a.start_time || `${a.date}T${a.startTime}`;
+        const sB = b.start_time || `${b.date}T${b.startTime}`;
+        const dateA = new Date(sA.includes("T") ? sA : sA.replace(" ", "T"));
+        const dateB = new Date(sB.includes("T") ? sB : sB.replace(" ", "T"));
+        return dateB.getTime() - dateA.getTime();
+      });
+
       // bookingsData is already filtered by student ID from the API
 
       // Calculate stats

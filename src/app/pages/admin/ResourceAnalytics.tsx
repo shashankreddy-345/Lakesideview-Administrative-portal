@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { Calendar, TrendingUp, Layers, Activity, AlertTriangle, CheckCircle, ArrowDown } from "lucide-react";
+import { Calendar, TrendingUp, Layers, Activity, AlertTriangle, CheckCircle, ArrowDown, Clock } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { api } from "../../services/api";
+import { supabase } from "../../services/supabase";
 import {
   buildDailyUtilizationTrend,
   buildWeeklyUtilizationAndBookings,
@@ -44,6 +45,7 @@ export function ResourceAnalytics() {
   const [resourceTypeDistribution, setResourceTypeDistribution] = useState<any[]>([]);
   const [totalBookings, setTotalBookings] = useState(0);
   const [avgUtilization, setAvgUtilization] = useState(0);
+  const [avgWaitTime, setAvgWaitTime] = useState(0);
   const [resourcePerformance, setResourcePerformance] = useState<{ over: any[], busy: any[], optimal: any[], under: any[] }>({ over: [], busy: [], optimal: [], under: [] });
 
   useEffect(() => {
@@ -53,9 +55,10 @@ export function ResourceAnalytics() {
         const startFilter = new Date(`${startDate}T00:00:00`);
         const endFilter = new Date(`${endDate}T23:59:59.999`);
 
-        const [resourcesData, bookingsData] = await Promise.all([
+        const [resourcesData, bookingsData, waitlistData] = await Promise.all([
           api.resources.list().catch(() => []),
-          api.bookings.list({ start: startFilter.toISOString(), end: endFilter.toISOString() }).catch(() => [])
+          api.bookings.list({ start: startFilter.toISOString(), end: endFilter.toISOString() }).catch(() => []),
+          supabase.from('waitlists').select('*').then(({ data }) => data || []).catch(() => [])
         ]);
 
         const validBookings: Booking[] = (Array.isArray(bookingsData) ? bookingsData : []).map((b: any) => {
@@ -88,6 +91,28 @@ export function ResourceAnalytics() {
         setTotalBookings(filteredBookingsCount.length);
         
         setResources(validResources);
+
+        // Calculate Avg Wait Time
+        const allocatedWaitlistItems = (Array.isArray(waitlistData) ? waitlistData : []).filter((w: any) => {
+          const s = String(w.status || '').toLowerCase();
+          return s === 'allocated' && (w.allocated_at || w.allocatedAt);
+        });
+
+        const filteredWaitlist = allocatedWaitlistItems.filter((w: any) => {
+             const allocatedDate = new Date(w.allocated_at || w.allocatedAt);
+             return allocatedDate >= analyticsStart && allocatedDate <= analyticsEnd;
+        });
+
+        const totalWaitTime = filteredWaitlist.reduce((acc: number, item: any) => {
+          const joinedStr = item.joined_at || item.created_at || item.createdAt || item.date;
+          const allocatedStr = item.allocated_at || item.allocatedAt;
+          const joined = joinedStr ? new Date(joinedStr).getTime() : new Date().getTime();
+          const allocated = allocatedStr ? new Date(allocatedStr).getTime() : new Date().getTime();
+          
+          return acc + Math.max(0, allocated - joined);
+        }, 0);
+
+        setAvgWaitTime(filteredWaitlist.length ? Math.round((totalWaitTime / filteredWaitlist.length) / 60000) : 0);
 
         // Calculate Overall Avg Utilization
         const overallMetrics = computeUtilizationMetrics(
@@ -252,12 +277,12 @@ export function ResourceAnalytics() {
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center">
-              <Calendar className="w-6 h-6 text-amber-600" />
+              <Clock className="w-6 h-6 text-amber-600" />
             </div>
           </div>
-          <h3 className="text-2xl font-semibold text-slate-900 mb-1">2-4 PM</h3>
-          <p className="text-sm text-slate-600">Peak Hours</p>
-          <p className="text-xs text-slate-500 mt-2">Wed-Thu busiest</p>
+          <h3 className="text-2xl font-semibold text-slate-900 mb-1">{avgWaitTime} min</h3>
+          <p className="text-sm text-slate-600">Avg Wait Time</p>
+          <p className="text-xs text-slate-500 mt-2">Selected period</p>
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from "react-router";
-import { BarChart3, MessageSquare, LogOut, ShieldCheck, User, LineChart, LayoutDashboard } from "lucide-react";
+import { BarChart3, MessageSquare, LogOut, ShieldCheck, User, LineChart, LayoutDashboard, ArrowLeftRight } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function AdminLayout() {
@@ -70,6 +70,19 @@ export function AdminLayout() {
           >
             <LayoutDashboard className="w-5 h-5" />
             <span className="font-medium">Room Analytics</span>
+          </NavLink>
+          <NavLink
+            to="/admin/comparison"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                isActive
+                  ? "bg-indigo-50 text-indigo-700"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              }`
+            }
+          >
+            <ArrowLeftRight className="w-5 h-5" />
+            <span className="font-medium">Booking Comparison</span>
           </NavLink>
           <NavLink
             to="/admin/feedback"

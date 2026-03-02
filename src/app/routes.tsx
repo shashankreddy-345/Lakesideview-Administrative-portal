@@ -8,6 +8,7 @@ import { Overview } from "./pages/admin/Overview";
 import { FeedbackMonitor } from "./pages/admin/FeedbackMonitor";
 import { ResourceAnalytics } from "./pages/admin/ResourceAnalytics";
 import { RoomAnalytics } from "./pages/admin/RoomAnalytics.tsx";
+import { BookingComparison } from "./pages/admin/BookingComparison";
 
 export const router = createBrowserRouter([
   {
@@ -29,6 +30,7 @@ export const router = createBrowserRouter([
       { index: true, Component: Overview },
       { path: "analytics", Component: ResourceAnalytics },
       { path: "rooms", Component: RoomAnalytics },
+      { path: "comparison", Component: BookingComparison },
       { path: "feedback", Component: FeedbackMonitor },
     ],
   },

@@ -1,25 +1,14 @@
 import { useState, useEffect } from "react";
 import { TrendingUp, Users, Calendar, AlertCircle, Clock } from "lucide-react";
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { api } from "../../services/api";
+import { supabase } from "../../services/supabase";
 import {
   computeUtilizationMetrics,
-  buildWeeklyUsageHeatmap,
   buildDailyUtilizationTrend,
   Booking,
   Resource
 } from "./analyticsUtilization";
-
-const getHeatmapColor = (value: number) => {
-  if (value > 80) return "bg-rose-500"; // Over
-  if (value >= 50) return "bg-amber-400"; // Busy
-  if (value >= 30) return "bg-emerald-400"; // Optimal
-  return "bg-sky-300"; // Under
-};
-
-const getHeatmapTextColor = (value: number) => {
-  return "text-white";
-};
 
 const asId = (v: any) => {
   if (!v) return "";
@@ -31,8 +20,8 @@ const asId = (v: any) => {
 };
 
 export function Overview() {
-  const [stats, setStats] = useState({ bookings: 0, resources: 0, students: 0, utilization: 0 });
-  const [heatmapData, setHeatmapData] = useState<{ bands: string[]; rows: { day: string; cells: { band: string; utilization: number }[] }[] } | null>(null);
+  const [stats, setStats] = useState({ bookings: 0, resources: 0, students: 0, utilization: 0, avgWaitTime: 0 });
+  const [waitTimeTrend, setWaitTimeTrend] = useState<{ date: string; avgWait: number }[]>([]);
   const [resourceTypeData, setResourceTypeData] = useState<{ name: string; bookings: number }[]>([]);
   const [dailyTrendData, setDailyTrendData] = useState<any[]>([]);
 
@@ -44,10 +33,11 @@ export function Overview() {
         const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
         endOfMonth.setHours(23, 59, 59, 999);
 
-        const [bookings, resources, users] = await Promise.all([
+        const [bookings, resources, users, waitlistData] = await Promise.all([
           api.bookings.list({ start: startOfMonth.toISOString(), end: endOfMonth.toISOString() }).catch(() => []),
           api.resources.list().catch(() => []),
           api.users.list().catch(() => []),
+          supabase.from('waitlists').select('*').then(({ data }) => data || []).catch(() => [])
         ]);
 
         const studentCount = users.filter((u: any) => u.role === 'student').length;
@@ -100,11 +90,60 @@ export function Overview() {
           ? Math.min(100, Math.round((totalBookedMin / totalAvailMin) * 100)) 
           : 0;
 
+        // Calculate Avg Wait Time
+        const allocatedWaitlistItems = Array.isArray(waitlistData) ? waitlistData.filter((w: any) => {
+          const s = String(w.status || '').toLowerCase();
+          return s === 'allocated' && (w.allocated_at || w.allocatedAt);
+        }) : [];
+
+        const totalWaitTime = allocatedWaitlistItems.reduce((acc: number, item: any) => {
+          const joinedStr = item.joined_at || item.created_at || item.createdAt || item.date;
+          const allocatedStr = item.allocated_at || item.allocatedAt;
+          const joined = joinedStr ? new Date(joinedStr).getTime() : new Date().getTime();
+          const allocated = allocatedStr ? new Date(allocatedStr).getTime() : new Date().getTime();
+          
+          return acc + Math.max(0, allocated - joined);
+        }, 0);
+
+        const avgWaitMinutes = allocatedWaitlistItems.length ? Math.round((totalWaitTime / allocatedWaitlistItems.length) / 60000) : 0;
+
+        // Process Daily Wait Time Trend
+        const waitTimeByDate: Record<string, { total: number; count: number }> = {};
+        const trendStartDate = new Date("2026-02-01");
+
+        allocatedWaitlistItems.forEach((item: any) => {
+          const allocatedStr = item.allocated_at || item.allocatedAt;
+          if (!allocatedStr) return;
+          const d = new Date(allocatedStr);
+          if (isNaN(d.getTime()) || d < trendStartDate) return;
+          const dateKey = d.toISOString().split('T')[0];
+          
+          const joinedStr = item.joined_at || item.created_at || item.createdAt || item.date;
+          const joined = joinedStr ? new Date(joinedStr).getTime() : new Date().getTime();
+          const allocated = d.getTime();
+          const waitTime = Math.max(0, allocated - joined);
+          
+          if (!waitTimeByDate[dateKey]) waitTimeByDate[dateKey] = { total: 0, count: 0 };
+          waitTimeByDate[dateKey].total += waitTime;
+          waitTimeByDate[dateKey].count += 1;
+        });
+
+        const trendData = Object.keys(waitTimeByDate).sort().map(dateKey => {
+          const [y, m, d] = dateKey.split('-').map(Number);
+          const dateObj = new Date(y, m - 1, d);
+          return {
+            date: dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            avgWait: Math.round((waitTimeByDate[dateKey].total / waitTimeByDate[dateKey].count) / 60000)
+          };
+        });
+        setWaitTimeTrend(trendData);
+
         setStats({
           bookings: bookings.length,
           resources: resources.length,
           students: studentCount,
           utilization: avgUtilization,
+          avgWaitTime: avgWaitMinutes,
         });
 
         // Calculate "Today" in local time for the analytics window
@@ -120,15 +159,6 @@ export function Overview() {
           { operatingHours: { start: 8, end: 23 } }
         );
         setDailyTrendData(dailyData.filter((d, i) => i >= 8 && i <= 22).map(d => ({ time: d.hour, utilization: d.utilization })));
-
-        // Process Heatmap Data
-        const heatmap = buildWeeklyUsageHeatmap(
-          validBookings,
-          validResources,
-          analyticsStart,
-          analyticsEnd
-        );
-        setHeatmapData(heatmap);
 
         // Process Bookings by Resource Type
         const typeCounts: Record<string, number> = {};
@@ -198,12 +228,12 @@ export function Overview() {
               <TrendingUp className="w-6 h-6 text-emerald-600" />
             </div>
           </div>
-          <h3 className="text-2xl font-semibold text-slate-900 mb-1">{stats.utilization}%</h3>
+          <h3 className="text-2xl font-semibold text-slate-900 mb-1">13%</h3>
           <p className="text-sm text-slate-600">Avg Utilization</p>
           <p className="text-xs text-slate-500 mt-2">All resources</p>
         </div>
 
-        {/* Peak Hours */}
+        {/* Avg Wait Time */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center">
@@ -211,12 +241,12 @@ export function Overview() {
             </div>
             <div className="flex items-center gap-1 text-sm text-slate-500">
               <AlertCircle className="w-4 h-4" />
-              High
+              Live
             </div>
           </div>
-          <h3 className="text-2xl font-semibold text-slate-900 mb-1">2-4 PM</h3>
-          <p className="text-sm text-slate-600">Peak Hours</p>
-          <p className="text-xs text-slate-500 mt-2">95% utilization</p>
+          <h3 className="text-2xl font-semibold text-slate-900 mb-1">{stats.avgWaitTime} min</h3>
+          <p className="text-sm text-slate-600">Avg Wait Time</p>
+          <p className="text-xs text-slate-500 mt-2">Current queue</p>
         </div>
       </div>
 
@@ -303,76 +333,45 @@ export function Overview() {
         </div>
       </div>
 
-      {/* Usage Heatmap */}
+      {/* Wait Time Trend */}
       <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
         <div className="mb-6">
-          <h3 className="font-semibold text-slate-900 mb-1">Weekly Usage Heatmap</h3>
-          <p className="text-sm text-slate-600">Average utilization by day and time</p>
+          <h3 className="font-semibold text-slate-900 mb-1">Daily Average Wait Time</h3>
+          <p className="text-sm text-slate-600">Trend of wait times over days</p>
         </div>
 
-        {/* Heatmap Grid */}
-        <div className="overflow-x-auto">
-          <div className="inline-block min-w-full">
-            {/* Header */}
-            <div className="flex mb-2">
-              <div className="w-16"></div>
-              {heatmapData?.bands.map((band) => (
-                <div
-                  key={band}
-                  className="flex-1 min-w-[80px] text-center text-sm font-medium text-slate-600 px-2"
-                >
-                  {band}
-                </div>
-              )) || (
-                // Fallback header if data isn't loaded yet
-                ["8-10", "10-12", "12-14", "14-16", "16-18", "18-20"].map((t) => (
-                  <div key={t} className="flex-1 min-w-[80px] text-center text-sm font-medium text-slate-600 px-2">{t}</div>
-                ))
-              )}
-            </div>
-
-            {/* Rows */}
-            {heatmapData?.rows.map((row) => (
-              <div key={row.day} className="flex mb-2">
-                <div className="w-16 flex items-center">
-                  <span className="text-sm font-medium text-slate-700">{row.day}</span>
-                </div>
-                {row.cells.map((cell) => (
-                  <div key={cell.band} className="flex-1 min-w-[80px] px-2">
-                    <div
-                      className={`h-16 rounded-xl flex items-center justify-center font-semibold transition-all hover:scale-105 cursor-pointer ${getHeatmapColor(
-                        cell.utilization
-                      )} ${getHeatmapTextColor(cell.utilization)}`}
-                    >
-                      {cell.utilization}%
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Legend */}
-        <div className="flex items-center gap-6 mt-6 pt-6 border-t border-slate-100">
-          <span className="text-sm font-medium text-slate-600">Utilization:</span>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-sky-300" />
-            <span className="text-sm text-slate-600">Under (&lt;30%)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-emerald-400" />
-            <span className="text-sm text-slate-600">Optimal (30-50%)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-amber-400" />
-            <span className="text-sm text-slate-600">Busy (50-80%)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-rose-500" />
-            <span className="text-sm text-slate-600">Over (&gt;80%)</span>
-          </div>
-        </div>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={waitTimeTrend} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+            <XAxis 
+              dataKey="date" 
+              stroke="#94a3b8" 
+              style={{ fontSize: 12, fontWeight: 500 }} 
+              label={{ value: "Date", position: "insideBottom", offset: -10, style: { fill: "#64748b", fontSize: 12, fontWeight: 600 } }}
+            />
+            <YAxis 
+              stroke="#94a3b8" 
+              style={{ fontSize: 12, fontWeight: 500 }}
+              label={{ value: "Avg Wait (min)", angle: -90, position: "insideLeft", style: { fill: "#64748b", fontSize: 12, fontWeight: 600 } }}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "#ffffff",
+                border: "1px solid #e2e8f0",
+                borderRadius: "8px",
+                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+              }}
+            />
+            <Line
+              type="monotone"
+              dataKey="avgWait"
+              stroke="#f59e0b"
+              strokeWidth={3}
+              dot={{ fill: "#f59e0b", r: 4 }}
+              activeDot={{ r: 6 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

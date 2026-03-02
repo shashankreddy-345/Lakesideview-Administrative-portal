@@ -72,9 +72,9 @@ export function Login() {
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center">
                 <GraduationCap className="w-6 h-6 text-white" />
               </div>
-              <h1 className="text-2xl font-semibold text-slate-900">CampusFlow</h1>
+              <h1 className="text-2xl font-semibold text-slate-900">Lakesideview University</h1>
             </div>
-            <p className="text-slate-600 ml-[52px]">Predictive Resource Management</p>
+            <p className="text-slate-600 ml-[52px]">Campus Resource Management</p>
           </div>
 
           {/* Role Selection */}
@@ -145,15 +145,7 @@ export function Login() {
                 required
               />
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-2 text-slate-600 cursor-pointer">
-                <input type="checkbox" className="w-4 h-4 rounded border-slate-300" />
-                Remember me
-              </label>
-              <a href="#" className="text-blue-600 hover:text-blue-700">
-                Forgot password?
-              </a>
-            </div>
+
             <Button
               type="submit"
               disabled={isLoading}
@@ -218,7 +210,7 @@ export function Login() {
         <div className="absolute inset-0 bg-black/10" />
         <div className="relative z-10 text-white max-w-lg">
           <h2 className="text-4xl font-semibold mb-4">
-            Smart Campus Resource Management
+            Campus Resource Management
           </h2>
           <div className="grid grid-cols-3 gap-4 bg-white/10 backdrop-blur-sm rounded-2xl p-6">
             <div className="text-center">
