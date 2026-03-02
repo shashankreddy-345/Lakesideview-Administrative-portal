@@ -210,7 +210,18 @@ export function FeedbackMonitor() {
       <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm mb-8">
         <div className="mb-6">
           <h3 className="font-semibold text-slate-900 mb-1">Rating Distribution</h3>
-          <p className="text-sm text-slate-600">Breakdown of feedback by star rating</p>
+          <p className="text-sm text-slate-600 mb-4">Breakdown of feedback by star rating</p>
+          <div className="flex flex-wrap gap-3 text-xs">
+            <div className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-100 font-medium">
+              1-2 Stars: High Priority (Read every review)
+            </div>
+            <div className="px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-100 font-medium">
+              3 Stars: Medium Priority
+            </div>
+            <div className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100 font-medium">
+              4-5 Stars: Low Priority (Maintenance)
+            </div>
+          </div>
         </div>
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">

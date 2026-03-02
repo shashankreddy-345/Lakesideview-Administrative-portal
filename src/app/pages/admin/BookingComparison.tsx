@@ -57,14 +57,25 @@ export function BookingComparison() {
           };
         });
 
-        const beforeBookings = validBookings.filter(b => new Date(b.start_time) < splitDate);
-        const afterBookings = validBookings.filter(b => new Date(b.start_time) >= splitDate);
+        // Logic update: Group A <= 2026-02-20, Group B > 2026-02-20
+        const cutoffDateStr = "2026-02-20";
+
+        const beforeBookings = validBookings.filter(b => {
+          if (!b.start_time || b.start_time.length < 10) return false;
+          return b.start_time.substring(0, 10) <= cutoffDateStr;
+        });
+        const afterBookings = validBookings.filter(b => {
+          if (!b.start_time || b.start_time.length < 10) return false;
+          return b.start_time.substring(0, 10) > cutoffDateStr;
+        });
 
         // 1. Daily Booking Counts
         const counts: { [key: string]: number } = {};
         validBookings.forEach(b => {
-          const day = b.start_time.split('T')[0];
-          counts[day] = (counts[day] || 0) + 1;
+          if (b.start_time && b.start_time.length >= 10) {
+            const day = b.start_time.substring(0, 10);
+            counts[day] = (counts[day] || 0) + 1;
+          }
         });
         const dailyData = Object.keys(counts).sort().map(day => ({
           date: day,
@@ -126,17 +137,28 @@ export function BookingComparison() {
         const getHourlyCounts = (bookings: NormalizedBooking[]) => {
           const hourly = Array(24).fill(0);
           bookings.forEach(b => {
-            const hour = new Date(b.start_time).getHours();
-            hourly[hour]++;
+            if (b.start_time && b.start_time.length >= 13) {
+              const hour = parseInt(b.start_time.substring(11, 13), 10);
+              if (!isNaN(hour) && hour >= 0 && hour < 24) {
+                hourly[hour]++;
+              }
+            }
           });
           return hourly;
         };
+        const getDaysInPeriod = (bookings: NormalizedBooking[]) => {
+            if (bookings.length === 0) return 1;
+            const uniqueDays = new Set(bookings.map(b => b.start_time.substring(0, 10)));
+            return uniqueDays.size || 1;
+        };
+        const beforeDays = getDaysInPeriod(beforeBookings);
+        const afterDays = getDaysInPeriod(afterBookings);
         const beforeHourly = getHourlyCounts(beforeBookings);
         const afterHourly = getHourlyCounts(afterBookings);
         const combinedHourly = Array(24).fill(0).map((_, i) => ({
           hour: `${String(i).padStart(2, '0')}:00`,
-          before: beforeHourly[i],
-          after: afterHourly[i]
+          before: beforeHourly[i] / beforeDays,
+          after: afterHourly[i] / afterDays
         }));
         setHourlyDistribution(combinedHourly);
 
@@ -212,7 +234,7 @@ export function BookingComparison() {
         {/* 2. Booking Status Distribution */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
           <h3 className="font-semibold text-slate-900 mb-1">Booking Status Distribution</h3>
-          <p className="text-sm text-slate-600 mb-6">Shift in proportion of successful vs. cancelled bookings.</p>
+          <p className="text-sm text-slate-600 mb-6">Shift in proportion cancelled bookings.</p>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={statusDistribution} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -220,9 +242,7 @@ export function BookingComparison() {
               <YAxis type="category" dataKey="period" width={100} />
               <Tooltip formatter={(value) => `${(value as number).toFixed(1)}%`} />
               <Legend />
-              <Bar dataKey="completed" stackId="a" fill="#10b981" name="Completed" />
-              <Bar dataKey="upcoming" stackId="a" fill="#3b82f6" name="Upcoming/Active" />
-              <Bar dataKey="cancelled" stackId="a" fill="#ef4444" name="Cancelled" radius={[0, 6, 6, 0]} />
+              <Bar dataKey="cancelled" fill="#ef4444" name="Cancelled" radius={[0, 6, 6, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -277,8 +297,8 @@ export function BookingComparison() {
             <BarChart data={hourlyDistribution}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="hour" style={{ fontSize: 11 }} />
-              <YAxis label={{ value: "Bookings", angle: -90, position: "insideLeft", style: { fill: "#64748b" } }} />
-              <Tooltip />
+              <YAxis label={{ value: "Average Bookings", angle: -90, position: "insideLeft", style: { fill: "#64748b" } }} />
+              <Tooltip formatter={(value: number) => value.toFixed(2)} />
               <Legend />
               <Bar dataKey="before" fill="#a855f7" name="Before Feb 20" radius={[4, 4, 0, 0]} />
               <Bar dataKey="after" fill="#f59e0b" name="After Feb 20" radius={[4, 4, 0, 0]} />
