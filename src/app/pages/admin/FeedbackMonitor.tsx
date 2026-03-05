@@ -333,18 +333,6 @@ export function FeedbackMonitor() {
               </div>
 
               <p className="text-slate-700 mb-4 leading-relaxed">{feedback.comment}</p>
-
-              <div className="flex gap-2">
-                <Button className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm">
-                  Respond
-                </Button>
-                <Button className="h-9 px-4 rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 text-sm">
-                  Mark as Reviewed
-                </Button>
-                <Button className="h-9 px-4 rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 text-sm">
-                  Archive
-                </Button>
-              </div>
             </div>
           );
         })}
