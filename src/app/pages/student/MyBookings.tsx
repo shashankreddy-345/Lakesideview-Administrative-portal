@@ -78,8 +78,8 @@ export function MyBookings() {
       bookingsData.sort((a: any, b: any) => {
         const sA = a.start_time || `${a.date}T${a.startTime}`;
         const sB = b.start_time || `${b.date}T${b.startTime}`;
-        const dateA = new Date(sA.includes("T") ? sA : sA.replace(" ", "T"));
-        const dateB = new Date(sB.includes("T") ? sB : sB.replace(" ", "T"));
+        const dateA = new Date((sA.includes("T") ? sA : sA.replace(" ", "T")).replace(/(Z|[+-]\d{2}:?\d{2})$/, ""));
+        const dateB = new Date((sB.includes("T") ? sB : sB.replace(" ", "T")).replace(/(Z|[+-]\d{2}:?\d{2})$/, ""));
         return dateB.getTime() - dateA.getTime();
       });
 
@@ -97,8 +97,8 @@ export function MyBookings() {
         const startStr = b.start_time || `${b.date}T${b.startTime}`;
         const endStr = b.end_time || `${b.date}T${b.endTime}`;
         // Handle potential space in date string if not ISO
-        const start = new Date(startStr.includes("T") ? startStr : startStr.replace(" ", "T"));
-        const end = new Date(endStr.includes("T") ? endStr : endStr.replace(" ", "T"));
+        const start = new Date((startStr.includes("T") ? startStr : startStr.replace(" ", "T")).replace(/(Z|[+-]\d{2}:?\d{2})$/, ""));
+        const end = new Date((endStr.includes("T") ? endStr : endStr.replace(" ", "T")).replace(/(Z|[+-]\d{2}:?\d{2})$/, ""));
 
         if (isNaN(start.getTime())) return;
 
@@ -146,12 +146,12 @@ export function MyBookings() {
       const mappedBookings: Booking[] = bookingsData.map((b: ApiBooking) => {
         // Handle potentially different field names from the API record
         const resourceId = (b as any).resource_id || b.resourceId;
-        const startTime = (b as any).start_time || b.startTime || "";
-        const endTime = (b as any).end_time || b.endTime || "";
+        const startStr = (b as any).start_time || `${(b as any).date}T${(b as any).startTime}`;
+        const endStr = (b as any).end_time || `${(b as any).date}T${(b as any).endTime}`;
         
         const resource = resourceMap.get(resourceId);
-        const start = new Date(startTime);
-        const end = new Date(endTime);
+        const start = new Date((startStr.includes("T") ? startStr : startStr.replace(" ", "T")).replace(/(Z|[+-]\d{2}:?\d{2})$/, ""));
+        const end = new Date((endStr.includes("T") ? endStr : endStr.replace(" ", "T")).replace(/(Z|[+-]\d{2}:?\d{2})$/, ""));
         const duration = !isNaN(start.getTime()) && !isNaN(end.getTime()) 
           ? Math.max(0, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60))) 
           : 0;

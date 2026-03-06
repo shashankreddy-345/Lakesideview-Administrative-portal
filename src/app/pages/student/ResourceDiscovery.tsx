@@ -69,6 +69,11 @@ const UTILIZATION_THRESHOLDS = {
   HIGH: 80,
 };
 
+const toLocalISO = (date: Date) => {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.000Z`;
+};
+
 export function ResourceDiscovery() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [selectedType, setSelectedType] = useState<string>("all");
@@ -91,7 +96,7 @@ export function ResourceDiscovery() {
 
       const [resourcesData, bookingsData] = await Promise.all([
         api.resources.list().catch(() => []),
-        api.bookings.list({ start: startOfDay.toISOString(), end: endOfDay.toISOString() }).catch(() => [])
+        api.bookings.list({ start: toLocalISO(startOfDay), end: toLocalISO(endOfDay) }).catch(() => [])
       ]);
 
       const currentTimestamp = now.getTime();
@@ -108,7 +113,7 @@ export function ResourceDiscovery() {
           const startStr = b.start_time || `${b.date}T${b.startTime}`;
           const endStr = b.end_time || `${b.date}T${b.endTime}`;
           
-          // Strip timezone offset to treat as local time
+          // Parse as ISO string directly to preserve timezone info
           const s = (startStr.includes("T") ? startStr : startStr.replace(" ", "T")).replace(/(Z|[+-]\d{2}:?\d{2})$/, "");
           const e = (endStr.includes("T") ? endStr : endStr.replace(" ", "T")).replace(/(Z|[+-]\d{2}:?\d{2})$/, "");
           
@@ -174,9 +179,11 @@ export function ResourceDiscovery() {
       // Construct ISO strings for Supabase (timestamptz)
       // Treat inputs as local time and convert to correct UTC instant
       const startLocal = new Date(`${bookingDate}T${bookingTime}:00`);
-      const endLocal = new Date(`${bookingDate}T${endTime}:00`);
-      const startDateTime = startLocal.toISOString();
-      const endDateTime = endLocal.toISOString();
+      // Calculate end time using Date object to handle day rollover correctly
+      const endLocal = new Date(startLocal.getTime() + parseInt(bookingDuration) * 60 * 60 * 1000);
+      
+      const startDateTime = toLocalISO(startLocal);
+      const endDateTime = toLocalISO(endLocal);
 
       // --- Validation Checks ---
       const dayStart = new Date(startLocal);
@@ -186,8 +193,8 @@ export function ResourceDiscovery() {
 
       // Fetch all bookings for the selected day to validate constraints
       const dayBookings = await api.bookings.list({
-        start: dayStart.toISOString(),
-        end: dayEnd.toISOString()
+        start: toLocalISO(dayStart),
+        end: toLocalISO(dayEnd)
       });
 
       const activeBookings = Array.isArray(dayBookings) ? dayBookings.filter((b: any) => b.status !== 'cancelled') : [];
